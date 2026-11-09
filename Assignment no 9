@@ -1,0 +1,180 @@
+import math
+
+def floyd_warshall(adj_matrix):
+    n = len(adj_matrix)
+    dist = [row[:] for row in adj_matrix]
+
+    for k in range(n):
+        for i in range(n):
+            for j in range(n):
+                if dist[i][k] + dist[k][j] < dist[i][j]:
+                    dist[i][j] = dist[i][k] + dist[k][j]
+
+    return dist
+
+
+def held_karp(dist, start=0):
+    n = len(dist)
+    ALL = 1 << n
+
+    dp = [dict() for _ in range(ALL)]
+    prev = [dict() for _ in range(ALL)]
+
+    start_mask = 1 << start
+    dp[start_mask][start] = 0
+
+    for mask in range(ALL):
+        if not (mask & start_mask):
+            continue
+
+        for u, cost_u in dp[mask].items():
+            for v in range(n):
+                if mask & (1 << v):
+                    continue
+
+                new_mask = mask | (1 << v)
+                new_cost = cost_u + dist[u][v]
+
+                if (
+                    v not in dp[new_mask]
+                    or new_cost < dp[new_mask][v]
+                ):
+                    dp[new_mask][v] = new_cost
+                    prev[new_mask][v] = u
+
+    full_mask = (1 << n) - 1
+    best_cost = math.inf
+    best_end = None
+
+    for v, cost in dp[full_mask].items():
+        total = cost + dist[v][start]
+
+        if total < best_cost:
+            best_cost = total
+            best_end = v
+
+    if best_end is None or math.isinf(best_cost):
+        return None, math.inf
+
+    path = []
+    mask = full_mask
+    cur = best_end
+
+    while cur != start:
+        path.append(cur)
+        prev_cur = prev[mask][cur]
+        mask ^= 1 << cur
+        cur = prev_cur
+
+    path.append(start)
+    path.reverse()
+    path.append(start)
+
+    return path, best_cost
+
+
+def path_cost(path, dist, return_to_start=True):
+    cost = 0
+
+    for i in range(len(path) - 1):
+        cost += dist[path[i]][path[i + 1]]
+
+    if return_to_start and path[-1] != path[0]:
+        cost += dist[path[-1]][path[0]]
+
+    return cost
+
+
+def two_opt(path, dist, max_iter=1000):
+    n = len(path)
+
+    if path[0] == path[-1]:
+        path = path[:-1]
+
+    best = path[:]
+    improved = True
+    it = 0
+
+    while improved and it < max_iter:
+        improved = False
+        it += 1
+
+        for i in range(1, n - 2):
+            for j in range(i + 1, n):
+                if j - i == 1:
+                    continue
+
+                new_path = best[:]
+                new_path[i:j] = reversed(best[i:j])
+
+                if path_cost(new_path, dist) < path_cost(best, dist):
+                    best = new_path
+                    improved = True
+
+    return best
+
+
+def nearest_neighbor_with_2opt(dist, start=0):
+    n = len(dist)
+    unvisited = set(range(n))
+    path = [start]
+
+    unvisited.remove(start)
+    current = start
+
+    while unvisited:
+        nxt = min(
+            unvisited,
+            key=lambda x: dist[current][x]
+        )
+
+        path.append(nxt)
+        unvisited.remove(nxt)
+        current = nxt
+
+    path = two_opt(path, dist)
+    path.append(start)
+
+    return path
+
+
+if __name__ == "__main__":
+    inf = math.inf
+
+    road_adj = [
+        [0, 10, inf, 30, 100],
+        [10, 0, 50, inf, inf],
+        [inf, 50, 0, 20, 10],
+        [30, inf, 20, 0, 60],
+        [100, inf, 10, 60, 0]
+    ]
+
+    dist = floyd_warshall(road_adj)
+
+    path, cost = held_karp(dist, start=0)
+
+    if path is not None:
+        print(
+            "Held-Karp optimal cycle:",
+            path,
+            "cost =",
+            cost
+        )
+    else:
+        print("No valid cycle found.")
+
+    hpath = nearest_neighbor_with_2opt(
+        dist,
+        start=0
+    )
+
+    hcost = path_cost(hpath, dist, return_to_start=False)
+
+    print(
+        "Heuristic cycle:",
+        hpath,
+        "cost =",
+        hcost
+    )
+
+    print("Process finished with exit code 0")
